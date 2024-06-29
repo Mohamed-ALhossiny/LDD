@@ -1,4 +1,4 @@
-obj-m+=4_EEPROM.o
+obj-m+=2_GPIO.o
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
