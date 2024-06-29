@@ -1,4 +1,4 @@
-obj-m+=3_PWM.o
+obj-m+=4_EEPROM.o
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
