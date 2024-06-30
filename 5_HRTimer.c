@@ -1,35 +1,18 @@
-/*Define only one macro*/
-// #define KLM_GPIO_IRQ            
-#define KLM_GPIO_TIMER  
-
-
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/uaccess.h>
-#include <linux/gpio.h>
-
-#if defined KLM_GPIO_TIMER
 #include <linux/jiffies.h>
+#include <linux/hrtimer.h>
 #include <linux/timer.h>
-#elif defined KLM_GPIO_IRQ
-#include <linux/interrupt.h>
-#endif
 
 
 // Module metadata
 MODULE_AUTHOR("Mohamed Alhossiny");
-
-#if defined KLM_GPIO_TIMER
 MODULE_DESCRIPTION("GPIO with timer driver");
-#elif defined KLM_GPIO_IRQ
-MODULE_DESCRIPTION("GPIO with IRQ driver");
-#endif
-
 MODULE_LICENSE("GPL");
 
-/*device info*/
 #define MY_MAJOR    12
 #define DRIVERNAME  "My_GPIO_Driver"
 #define DRIVERCALSS "My_Class2"
@@ -38,26 +21,18 @@ static dev_t my_device_num;
 static struct class *my_class;
 static struct cdev my_device;
 
-#if defined KLM_GPIO_TIMER
-/*GPIO and timer objects*/
-static struct timer_list my_timer;
+/*hrtimer objects*/
+static struct hrtimer my_hrtimer;
+u64 start_time;
 static unsigned int TIME_DELAY_MS = 1000;
-/*module parameters*/
 module_param(TIME_DELAY_MS, uint, S_IRUGO);
-MODULE_PARM_DESC(TIME_DELAY_MS, "Time in ms to turn off the LED");
-/*called when timer expired*/
-void timer_callback(struct timer_list* data){
-    printk("%u ms passed!\n", TIME_DELAY_MS);
-    gpio_set_value(16, 0);
+
+MODULE_PARM_DESC(TIME_DELAY_MS, "Timer in ms to fire the callback function");
+static enum hrtimer_restart my_hrtimer_callback(struct hrtimer* timer){
+    printk("%u ms has passed!\n", jiffies_to_msecs(jiffies - start_time));
+    start_time = jiffies;
+    return HRTIMER_NORESTART;
 }
-#elif defined KLM_GPIO_IRQ
-/*irq objects*/
-static unsigned int gpio_irq_num;
-static irq_handler_t gpio_irq_callback(unsigned int irq, void* dev_id, struct pt_regs* regs){
-    printk("Botton is pressed!\n");
-    return (irq_handler_t) IRQ_HANDLED;
-}
-#endif
 
 
 static int my_open(struct inode* Dev_file, struct file* inst){
@@ -67,6 +42,7 @@ static int my_open(struct inode* Dev_file, struct file* inst){
 }
 static ssize_t my_read(struct file* File, char *user_buf, size_t count, loff_t* offs){
     int to_copy, not_copy;
+
 
     /*Get amount of items to copy*/
     // to_copy = min(buffer_pos, count);
@@ -139,42 +115,18 @@ static int __init custom_init(void) {
     printk("Unable to register device to kernel!\n");
     goto Add_Error;
   }
-  /*GPIO and tiemr init*/
-  if(gpio_request(16, "raspi-16")){
-    printk("Can't request gpio pin!\n");
-    goto Add_Error;
-  }
-#if defined KLM_GPIO_TIMER
-  if(gpio_direction_output(16, 0)){
-    printk("Can't set gpio pin to be output!\n");
-    goto direction_Error;
-  }
-  timer_setup(&my_timer, timer_callback, 0);
-  mod_timer(&my_timer, jiffies + msecs_to_jiffies(1000));
-#elif defined KLM_GPIO_IRQ
-  if(gpio_direction_input(16)){
-    printk("Can't set gpio pin to be input!\n");
-    goto direction_Error;
-  }
-  gpio_irq_num = gpio_to_irq(16);
-  if(request_irq(gpio_irq_num, (irq_handler_t) gpio_irq_callback, IRQF_TRIGGER_RISING, "My_gpio_irq", NULL) != 0){
-    printk("Can't request gpio irq!\n");
-    goto Irq_Error;
-  }
-  printk("gpio irq is %u\n", gpio_irq_num);
-#endif
+  /*hrtimer init*/
+  hrtimer_init(&my_hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+  my_hrtimer.function = my_hrtimer_callback;
+  start_time = jiffies;
+  hrtimer_start(&my_hrtimer, ms_to_ktime(TIME_DELAY_MS), HRTIMER_MODE_REL);
   /*
          init function returns a value to make sure that module is initialized correctly,
          if any error occurs then return a negative number.
          if not returns 0.
     */
    return 0;
-#if defined KLM_GPIO_IRQ
-   Irq_Error:
-        free_irq(gpio_irq_num, NULL);
-#endif
-   direction_Error:
-        gpio_free(16);
+
    Add_Error:
         device_destroy(my_class, my_device_num);
    File_Error:
@@ -185,12 +137,7 @@ static int __init custom_init(void) {
 }
 /*Get called when unloading the module*/
 static void __exit custom_exit(void) {
-    #if defined KLM_GPIO_TIMER
-    del_timer(&my_timer);
-#elif defined KLM_GPIO_IRQ
-    free_irq(gpio_irq_num, NULL);
-#endif
-    gpio_free(16);
+    hrtimer_cancel(&my_hrtimer);
     cdev_del(&my_device);
     device_destroy(my_class, my_device_num);
     class_destroy(my_class);

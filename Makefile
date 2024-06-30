@@ -1,4 +1,4 @@
-obj-m+=2_GPIO.o
+obj-m+=5_HRTimer.o
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
