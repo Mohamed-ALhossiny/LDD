@@ -1,5 +1,5 @@
 #! /bin/bash
 
-scp *.c Makefile mohamed@192.168.1.14:/home/mohamed/mod/
+scp *.c *.h Makefile mohamed@192.168.1.6:/home/mohamed/mod/
 
 

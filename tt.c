@@ -26,7 +26,8 @@ MODULE_LICENSE("GPL");
 static dev_t my_device_num;
 static struct class *my_class;
 static struct cdev my_device;
-unsigned eeprom_seek_addr = 0x00;
+static unsigned char eeprom_seek_addr = 0x00;
+static unsigned char eeprom_data_to_read_num = 1;
 
 /*I2C Objects*/
 static struct i2c_adapter* eeprom_i2c_adapter; /*adapter to i2c bus*/
@@ -63,6 +64,12 @@ static long int EEPROM_ioctl(struct file* filre, unsigned cmd, unsigned long arg
             printk("eeprom seek get updated to %d\n", eeprom_seek_addr);
         }
         break;
+    case DATA_TO_READ:
+        if(copy_from_user(&eeprom_data_to_read_num, (unsigned char*)arg, sizeof(eeprom_data_to_read_num))){
+            printk("Error while reading ioctl arg\n");
+        }else{
+            printk("eeprom amount of data to read get updated to %d\n", eeprom_data_to_read_num);
+        }
     default:
         break;
     }
@@ -70,48 +77,41 @@ static long int EEPROM_ioctl(struct file* filre, unsigned cmd, unsigned long arg
 }
 
 static int my_open(struct inode* Dev_file, struct file* inst){
-    printk("-----Device file is opened!-----\n");
+    printk("Device file is opened!\n");
     return 0;
 }
 static ssize_t my_read(struct file* File, char *user_buf, size_t count, loff_t* offs){
-    int transfered = 0, not_copied = 0;
-    unsigned char data[256];
-    printk("-----Device file read operation!-----\n");
-    transfered = i2c_smbus_read_block_data(eeprom_i2c_client, eeprom_seek_addr, data);
-    if(transfered < 0){
-        printk("Can't transfer the data!\n");
-        return 0;
-    }
-    eeprom_seek_addr += transfered;
-    
-    for(int i = 0; i < count; i++){
-        printk("data: %c\n", data[i]);
-    }
-    not_copied = copy_to_user(user_buf, data, count);
-    printk("Received data is %u, not copied data to user is %u\n", transfered, not_copied);
+    int not_copied = 0;
+    printk("Device file read operation!\n");
+    // unsigned char data[256];
+    // for(unsigned char i = 0; i < eeprom_data_to_read_num; i++, eeprom_seek_addr++){
+    //     data[i] = i2c_smbus_read_byte_data(eeprom_i2c_client, eeprom_seek_addr);
+    // }
+    // for(int i = 0; i< eeprom_data_to_read_num; i++){
+    //     printk("data: %x\n", data[i]);
+    // }
+    // not_copied = copy_to_user(user_buf, data, eeprom_data_to_read_num);
+    printk("not copied data to user is %d\n", not_copied);
     return 0;
 }
 
 static ssize_t my_write(struct file* File, const char *user_buf, size_t count, loff_t* offs){
-    int transfered = 0;
     unsigned char data[256];
-    printk("-----Device file write operation!-----\n");
-    if(copy_from_user(data, user_buf, count - 1) != 0){
-        printk("Error while reading user data to write!\n");
-        return 0;
-    }
-    printk("user data is %s", data);
-    transfered = i2c_smbus_write_block_data(eeprom_i2c_client, eeprom_seek_addr, count - 1, data);
-    if(transfered < 0){
-        printk("Can't receive data from the device!\n");
-    }
-    eeprom_seek_addr += transfered;
+    printk("Device file write operation!\n");
+    // if(copy_from_user(data, user_buf, eeprom_data_to_read_num) != 0){
+    //     printk("Error while reading user data to write!\n");
+    //     return 0;
+    // }
+    // printk("user data is %s", data);
+    // for(unsigned char i = 0; i < eeprom_data_to_read_num; i++, eeprom_seek_addr++){
+    //     i2c_smbus_write_byte_data(eeprom_i2c_client, eeprom_seek_addr, data[i]);
+    // }
     printk("Device file write operation done, seek at %d!\n", eeprom_seek_addr);
     return 0;
 }
 
 static int my_close(struct inode* Dev_file, struct file* inst){
-    printk("-----Device file is closed!-----\n");
+    printk("Device file is closed!\n");
     return 0;
 }
 
@@ -161,23 +161,23 @@ static int __init custom_init(void) {
     goto Add_Error;
   }
 
-  /*I2C initialization*/
-  eeprom_i2c_adapter = i2c_get_adapter(I2C_BUS);
-  if(eeprom_i2c_adapter == NULL){
-    printk("Can't initialize an I2C adapter!\n");
-    goto Add_Error;
-  }
-  eeprom_i2c_client = i2c_new_client_device(eeprom_i2c_adapter, &eeprom_i2c_board_info);
-  if(eeprom_i2c_client == NULL){
-    printk("Can't add new I2C Client device!\n");
-    goto Client_Error;
-  }
+//   /*I2C initialization*/
+//   eeprom_i2c_adapter = i2c_get_adapter(I2C_BUS);
+//   if(eeprom_i2c_adapter == NULL){
+//     printk("Can't initialize an I2C adapter!\n");
+//     goto Add_Error;
+//   }
+//   eeprom_i2c_client = i2c_new_client_device(eeprom_i2c_adapter, &eeprom_i2c_board_info);
+//   if(eeprom_i2c_client == NULL){
+//     printk("Can't add new I2C Client device!\n");
+//     goto Client_Error;
+//   }
   
-  if(i2c_add_driver(&EEPROM_i2c_driver) == -1){
-    printk("Can't add I2C EEPROM Driver!\n");
-    goto driver_Error;
-  }
-  i2c_put_adapter(eeprom_i2c_adapter);
+//   if(i2c_add_driver(&EEPROM_i2c_driver) == -1){
+//     printk("Can't add I2C EEPROM Driver!\n");
+//     goto driver_Error;
+//   }
+//   i2c_put_adapter(eeprom_i2c_adapter);
 
   printk("I2c EEPROM Driver added!\n");
 //   for(int i = 0; i < 256; i++){
